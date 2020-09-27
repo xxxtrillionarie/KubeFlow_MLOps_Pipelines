@@ -22,7 +22,7 @@ spec:
         withParam: "{{steps.multiplier.outputs.parameters.multiplier-output-array}}"
   - name: importer
     container:
-      image: gcr.io/yang-experiment-6/mlmd:0.5
+      image: gcr.io/yang-experiment-6/mlmd:0.6
       command: ["python3"]
       args:
         - -u
@@ -35,7 +35,7 @@ spec:
         - "{{pod.name}}"
   - name: multiplier
     container:
-      image: gcr.io/yang-experiment-6/mlmd:0.5
+      image: gcr.io/yang-experiment-6/mlmd:0.6
       command: ["python3"]
       args:
         - -u
