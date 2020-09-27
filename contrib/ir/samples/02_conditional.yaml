@@ -1,3 +1,5 @@
+
+
 apiVersion: argoproj.io/v1alpha1
 kind: Workflow
 metadata:
@@ -13,27 +15,27 @@ spec:
         template: multiplier
     - - name: print
         template: print
-        when: "{{steps.multiplier.outputs.parameters.artifacts_multiplier-output_custom_properties_accuracy}} > 1.5"
+        when: "{{steps.multiplier.outputs.parameters.multiplier-output}} > 1.5"
         arguments:
           parameters:
           - name: multiplier-output-accuracy
-            value: "{{steps.multiplier.outputs.parameters.artifacts_multiplier-output_custom_properties_accuracy}}"
+            value: "{{steps.multiplier.outputs.parameters.multiplier-output}}"
   - name: importer
     container:
-      image: gcr.io/yang-experiment-6/mlmd:0.2
+      image: gcr.io/yang-experiment-6/mlmd:0.3
       command: ["python3"]
       args:
         - -u
         - /kfp/launcher/importer.py
-        - --inputs_json
-        - '{"inputs":{"artifacts":[{"key":"pipeline_input", "value":{"custom_properties":[{"key":"accuracy","value":0}]}}]}}'
+        - --outputs_json
+        - '{"outputs":{"artifacts":[{"key":"pipeline_input", "value":{"custom_properties":[{"key":"accuracy","value":1}]}}]}}'
         - --argo_workflow_name
         - "{{workflow.name}}"
         - --pod_name
         - "{{pod.name}}"
   - name: multiplier
     container:
-      image: gcr.io/yang-experiment-6/mlmd:0.2
+      image: gcr.io/yang-experiment-6/mlmd:0.3
       command: ["python3"]
       args:
         - -u
@@ -48,9 +50,9 @@ spec:
         - "{{pod.name}}"
     outputs:
       parameters:
-      - name: artifacts_multiplier-output_custom_properties_accuracy
+      - name: multiplier-output
         valueFrom:
-          path: /tmp/artifacts_multiplier-output_custom_properties_accuracy
+          path: /tmp/outputs/artifacts/multiplier-output/custom_properties/accuracy
   - name: print
     inputs:
       parameters:
@@ -58,15 +60,3 @@ spec:
     container:
       image: alpine:3.7
       command: [echo, "{{inputs.parameters.multiplier-output-accuracy}}"]
-
-
-
-  inputs: {
-    artifacts: {
-      key: "examples"
-      value: {
-        producer_task: "example-gen"
-        output_artifact_key: "examples"
-      }
-    }
-  }

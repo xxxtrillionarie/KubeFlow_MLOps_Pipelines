@@ -65,11 +65,20 @@ for artifact in inputs["inputs"]["artifacts"]:
 outputs = json.loads(args.outputs_json)
 outputs["outputs"]["artifacts"][0]["value"]["custom_properties"][0]["value"] = input_artifact.custom_properties["accuracy"].int_value*2
 
-# register output artifacts
+os.mkdir('/tmp/outputs')
+os.mkdir('/tmp/outputs/artifacts')
+# store output artifacts to MLMD, as well as exporting the custom property to argo via a file.
 for artifact in outputs["outputs"]["artifacts"]:
+    # create the directory for all custom property value of the artifact
+    os.mkdir('/tmp/outputs/artifacts/'+artifact["key"])
+    os.mkdir('/tmp/outputs/artifacts/'+artifact["key"]+'/custom_properties')
     custom_properties={}
     for cp in artifact["value"]["custom_properties"]:
         custom_properties[cp["key"]]=metadata_store_pb2.Value(int_value=cp["value"])
+        # export the custom property
+        with open('/tmp/outputs/artifacts/'+artifact["key"]+'/custom_properties/'+cp["key"],"w+") as writer:
+            writer.write(str(cp["value"]))
+
     create_new_artifact_event_and_attribution(
         store=mlmd_store,
         execution_id=execution.id,
@@ -79,6 +88,3 @@ for artifact in outputs["outputs"]["artifacts"]:
         event_type=metadata_store_pb2.Event.OUTPUT,
         custom_properties=custom_properties,
     )
-
-with open("/tmp/artifacts_step-one-output_custom_properties_accuracy","w+") as writer:
-    writer.write(str(outputs["outputs"]["artifacts"][0]["value"]["custom_properties"][0]["value"]))

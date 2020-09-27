@@ -15,7 +15,7 @@ spec:
         template: multiplier
   - name: importer
     container:
-      image: gcr.io/yang-experiment-6/mlmd:0.2
+      image: gcr.io/yang-experiment-6/mlmd:0.3
       command: ["python3"]
       args:
         - -u
@@ -28,7 +28,7 @@ spec:
         - "{{pod.name}}"
   - name: multiplier
     container:
-      image: gcr.io/yang-experiment-6/mlmd:0.2
+      image: gcr.io/yang-experiment-6/mlmd:0.3
       command: ["python3"]
       args:
         - -u

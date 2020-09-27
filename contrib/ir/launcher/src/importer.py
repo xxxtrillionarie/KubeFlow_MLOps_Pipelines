@@ -51,7 +51,7 @@ execution = create_new_execution_in_existing_run_context(
     run_id=args.argo_workflow_name,
 )
 
-# register input artifacts
+# register artifacts
 outputs = json.loads(args.outputs_json)
 for artifact in outputs["outputs"]["artifacts"]:
     custom_properties={}
@@ -61,7 +61,7 @@ for artifact in outputs["outputs"]["artifacts"]:
         store=mlmd_store,
         execution_id=execution.id,
         context_id=run_context.id,
-        uri="/fake/"+args.argo_workflow_name+'/'+artifact["key"],
+        uri="/"+args.argo_workflow_name+'/'+artifact["key"],
         type_name='NoType',
         event_type=metadata_store_pb2.Event.OUTPUT,
         custom_properties=custom_properties,
