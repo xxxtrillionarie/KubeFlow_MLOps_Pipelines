@@ -59,7 +59,7 @@ for artifact in inputs["inputs"]["artifacts"]:
     # Instead this should get the artifact by the execution and then its output artifacts.
     producer_task = artifact["value"]["producer_task"]
     output_artifact_key = artifact["value"]["output_artifact_key"]
-    input_artifact = mlmd_store.get_artifacts_by_uri(uri='/'+'importer001'+'/'+output_artifact_key)[0]
+    input_artifact = mlmd_store.get_artifacts_by_uri(uri='/'+args.argo_workflow_name+'/'+output_artifact_key)[0]
 
 # do execution
 outputs = json.loads(args.outputs_json)
