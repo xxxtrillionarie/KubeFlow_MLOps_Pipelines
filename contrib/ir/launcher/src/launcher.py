@@ -26,29 +26,17 @@ import argparse
 from time import sleep
 from metadata_helpers import *
 
-
-# Sample inputs
-# inputs_json =  '{ "inputs":{"artifacts":[{"key":"step-one-input", "value":{"custom_properties":[{"key":"accuracy","value":1}]}}]}}'
-# outputs_json = '{ "outputs":{"artifacts":[{"key":"step-one-output", "value":{"custom_properties":[{"key":"accuracy"}]}}]}}'
-# argo_workflow_name = str(random.randint(0,9999))
-# pod_name = str(random.randint(0,9999))
-
 parser = argparse.ArgumentParser(description='mlmd')
-
 parser.add_argument('--inputs_json', type=str)
 parser.add_argument('--outputs_json', type=str)
 parser.add_argument('--argo_workflow_name', type=str)
 parser.add_argument('--pod_name', type=str)
 args = parser.parse_args()
 
-
-namespace_to_watch = os.environ.get('NAMESPACE_TO_WATCH', 'default')
-kubernetes.config.load_incluster_config()
-k8s_api = kubernetes.client.CoreV1Api()
 #Connecting to MetadataDB
 mlmd_store = connect_to_mlmd()
 
-# create artifacts and execution
+# create context if needed.
 run_context = get_or_create_run_context(
     store=mlmd_store,
     run_id=args.argo_workflow_name, # We can switch to internal run IDs once backend starts adding them
@@ -64,25 +52,18 @@ execution = create_new_execution_in_existing_run_context(
     run_id=args.argo_workflow_name,
 )
 
-# register input artifacts
+# get input artifacts
 inputs = json.loads(args.inputs_json)
 for artifact in inputs["inputs"]["artifacts"]:
-    custom_properties={}
-    for cp in artifact["value"]["custom_properties"]:
-        custom_properties[cp["key"]]=metadata_store_pb2.Value(int_value=cp["value"])
-    create_new_artifact_event_and_attribution(
-        store=mlmd_store,
-        execution_id=execution.id,
-        context_id=run_context.id,
-        uri="/fake/"+artifact["key"],
-        type_name='NoType',
-        event_type=metadata_store_pb2.Event.INPUT,
-        custom_properties=custom_properties,
-    )
+    # Here we take a shortcut assuming the uri is constructed in a specific way.
+    # Instead this should get the artifact by the execution and then its output artifacts.
+    producer_task = artifact["value"]["producer_task"]
+    output_artifact_key = artifact["value"]["output_artifact_key"]
+    input_artifact = mlmd_store.get_artifacts_by_uri(uri='/'+'importer001'+'/'+output_artifact_key)[0]
 
 # do execution
 outputs = json.loads(args.outputs_json)
-outputs["outputs"]["artifacts"][0]["value"]["custom_properties"][0]["value"] = inputs["inputs"]["artifacts"][0]["value"]["custom_properties"][0]["value"]*2;
+outputs["outputs"]["artifacts"][0]["value"]["custom_properties"][0]["value"] = input_artifact.custom_properties["accuracy"].int_value*2
 
 # register output artifacts
 for artifact in outputs["outputs"]["artifacts"]:
@@ -93,7 +74,7 @@ for artifact in outputs["outputs"]["artifacts"]:
         store=mlmd_store,
         execution_id=execution.id,
         context_id=run_context.id,
-        uri="/fake/"+artifact["key"],
+        uri="/"+args.argo_workflow_name+'/'+artifact["key"],
         type_name='NoType',
         event_type=metadata_store_pb2.Event.OUTPUT,
         custom_properties=custom_properties,
