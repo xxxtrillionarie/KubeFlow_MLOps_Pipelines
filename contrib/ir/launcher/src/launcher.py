@@ -74,7 +74,10 @@ for artifact in outputs["outputs"]["artifacts"]:
     os.mkdir('/tmp/outputs/artifacts/'+artifact["key"]+'/custom_properties')
     custom_properties={}
     for cp in artifact["value"]["custom_properties"]:
-        custom_properties[cp["key"]]=metadata_store_pb2.Value(int_value=cp["value"])
+        if(type(cp["value"]) is str):
+            custom_properties[cp["key"]]=metadata_store_pb2.Value(string_value=cp["value"])
+        else:
+            custom_properties[cp["key"]]=metadata_store_pb2.Value(int_value=cp["value"])
         # export the custom property
         with open('/tmp/outputs/artifacts/'+artifact["key"]+'/custom_properties/'+cp["key"],"w+") as writer:
             writer.write(str(cp["value"]))
