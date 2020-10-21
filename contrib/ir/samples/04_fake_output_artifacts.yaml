@@ -1,0 +1,93 @@
+# This example demonstrates the ability to pass artifacts
+# from one step to the next.
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  generateName: artifact-passing-
+spec:
+  entrypoint: artifact-example
+  templates:
+  - name: artifact-example
+    steps:
+    - - name: generate-artifact
+        template: whalesay
+    - - name: fake-artifact-outputs
+        template: fake-outputs
+        arguments:
+          parameters:
+          - name: step-id
+            value: "{{steps.generate-artifact.outputs.parameters.id}}"
+    - - name: consume-artifact
+        template: print-message
+        arguments:
+          artifacts:
+          - name: message
+            from: '{{steps.fake-artifact-outputs.outputs.artifacts.hello-art}}'
+
+  - name: whalesay
+    container:
+      image: docker/whalesay:latest
+      command: [sh, -c]
+      args: ["sleep 1; cowsay hello world | tee /tmp/hello_world.txt"]
+    outputs:
+      artifacts:
+      - name: hello-art
+        path: /tmp/hello_world.txt
+      parameters:
+      - name: id
+        value: "{{pod.name}}"
+
+  - name: print-message
+    inputs:
+      artifacts:
+      - name: message
+        path: /tmp/message
+    container:
+      image: alpine:latest
+      command: [sh, -c]
+      args: ["cat /tmp/message"]
+  
+  - name: fake-outputs
+    inputs:
+      parameters:
+      - name: step-id
+    outputs:
+      artifacts:
+      - name: hello-art
+        path: /tmp/faked
+        optional: true
+    script:
+      image: python:3-alpine
+      command: [python]
+      source: |
+        import subprocess
+        import sys
+        def install(package):
+            subprocess.check_call([sys.executable, "-m", "pip", "install", package])
+        install('kubernetes')
+
+        from kubernetes import client, config
+        # this is for local config
+        # config.load_kube_config()
+        config.load_incluster_config()
+
+        v1 = client.CoreV1Api()
+        previous_pod = v1.read_namespaced_pod(
+            name='{{inputs.parameters.step-id}}',
+            namespace='kubeflow')
+        previous_outputs_raw = previous_pod.metadata.annotations.get('workflows.argoproj.io/outputs')
+
+        import json
+        previous_outputs = json.loads(previous_outputs_raw)
+        print(previous_outputs)
+
+        # HACK: patch this pod's workflows.argoproj.io/outputs annotation to
+        # directly manipulate its artifact outputs.
+        # Potential problem: argo sidecar will update this annotation soon, so
+        # far, my experiments show that argo controller will pick the first emitted
+        # annotation. However, there's no guarantee there won't be a race condition
+        # or this will stay the same for ever.
+        v1.patch_namespaced_pod(
+            name='{{pod.name}}',
+            namespace='kubeflow',
+            body={'metadata':{'annotations':{'workflows.argoproj.io/outputs': previous_outputs_raw}}})
