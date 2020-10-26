@@ -1,0 +1,114 @@
+# This example demonstrates the ability to pass artifacts
+# from one step to the next.
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  generateName: caching-
+spec:
+  entrypoint: artifact-example
+  templates:
+  - name: artifact-example
+    steps:
+    - - name: generate-artifact
+        template: whalesay
+    - - name: cache-artifact-outputs
+        template: cache-outputs
+        # A hack to let the following step continue regardless of error in this
+        # step. We might need to let the next step make sure this error is
+        # emitted intentionally for skipping this step.
+        # However, even though this step errored, the next step can still consume
+        # emitted artifacts.
+        continueOn:
+          error: true
+        arguments:
+          parameters:
+          - name: step-id
+            value: "{{steps.generate-artifact.outputs.parameters.id}}"
+    - - name: consume-artifact
+        template: print-message
+        arguments:
+          artifacts:
+          - name: message
+            from: '{{steps.cache-artifact-outputs.outputs.artifacts.hello-art}}'
+
+  - name: whalesay
+    container:
+      image: docker/whalesay:latest
+      command: [sh, -c]
+      args: ["sleep 1; cowsay hello world | tee /tmp/hello_world.txt"]
+    outputs:
+      artifacts:
+      - name: hello-art
+        path: /tmp/hello_world.txt
+      parameters:
+      - name: id
+        value: "{{pod.name}}"
+
+  - name: print-message
+    inputs:
+      artifacts:
+      - name: message
+        path: /tmp/message
+    container:
+      image: alpine:latest
+      command: [sh, -c]
+      args: ["cat /tmp/message"]
+  
+  # This step is what I want to demonstrate, the initContainer programmatically
+  # specifies its output artifacts from a previous step, and exits, skipping
+  # main and argo wait containers.
+  - name: cache-outputs
+    inputs:
+      parameters:
+      - name: step-id
+    outputs:
+      artifacts:
+      - name: hello-art
+        path: /tmp/cached
+        optional: true
+    initContainers:
+    - name: cache-handler
+      image: python:3-alpine
+      command: [sh, -c]
+      args:
+        - |
+          python - <<-EOF
+
+          import subprocess
+          import sys
+          def install(package):
+              subprocess.check_call([sys.executable, "-m", "pip", "install", package])
+          install('kubernetes')
+
+          from kubernetes import client, config
+          # this is for local config
+          # config.load_kube_config()
+          config.load_incluster_config()
+
+          v1 = client.CoreV1Api()
+          previous_pod = v1.read_namespaced_pod(
+              name='{{inputs.parameters.step-id}}',
+              namespace='kubeflow')
+          previous_outputs_raw = previous_pod.metadata.annotations.get('workflows.argoproj.io/outputs')
+
+          import json
+          previous_outputs = json.loads(previous_outputs_raw)
+          print(previous_outputs)
+
+          # HACK: patch this pod's workflows.argoproj.io/outputs annotation to
+          # directly manipulate its artifact outputs.
+          v1.patch_namespaced_pod(
+              name='{{pod.name}}',
+              namespace='kubeflow',
+              body={'metadata':{'annotations':{'workflows.argoproj.io/outputs': previous_outputs_raw}}})
+          
+          # Exiting with non-zero exit-code errors out the pod and skips main/argo wait containers.
+          # This won't fail the workflow because we added `continueOn: {error: true}` above to tolerate this error.
+          sys.exit(1)
+
+          EOF
+    script:
+      image: python:3-alpine
+      command: [python]
+      source: |
+        print('I will never run, because this step is cached')
