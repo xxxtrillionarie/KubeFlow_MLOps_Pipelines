@@ -1,0 +1,101 @@
+# This example demonstrates the ability to pass artifacts
+# from one step to the next.
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  generateName: caching-using-when-
+spec:
+  entrypoint: pipeline
+  templates:
+  - name: pipeline
+    steps:
+    - - name: kfp-task-1
+        template: kfp-task-1
+    - - name: kfp-task-2
+        template: printer
+        arguments:
+          parameters:
+          - name: message
+            value: 'this message should come from MLMD in a real KFP pipeline'
+
+  - name: kfp-task-1
+    dag:
+      tasks:
+      - name: driver
+        template: driver
+      - name: executor
+        depends: 'driver'
+        # Replace the following with executor-fail to mimick failed step.
+        template: executor-fail
+        when: '{{tasks.driver.outputs.parameters.isCached}} != 1'
+      - name: publisher
+        # The publisher should publish metadata to MLMD when executor fails too.
+        depends: 'executor.Succeeded || executor.Failed || executor.Errored'
+        template: publisher
+        arguments:
+          parameters:
+          - name: status
+            value: '{{tasks.executor.status}}'
+          artifacts:
+          - name: message
+            from: '{{tasks.executor.outputs.artifacts.hello-art}}'
+            optional: true # The executor might have failed, so this might be empty.
+  - name: driver
+    outputs:
+      parameters:
+      - name: isCached # The driver is responsible for emitting caching decision.
+        valueFrom:
+          path: /tmp/cached
+    script:
+      image: alpine:latest
+      command: [sh]
+      source: |
+        echo $((RANDOM%2)) > /tmp/cached
+  - name: executor
+    container:
+      image: docker/whalesay:latest
+      command: [sh, -c]
+      args: ["sleep 1; cowsay hello world | tee /tmp/hello_world.txt"]
+    outputs:
+      artifacts:
+      - name: hello-art
+        path: /tmp/hello_world.txt
+  - name: executor-fail
+    container:
+      image: alpine:latest
+      command: [sh, -c]
+      args: ['exit 1']
+    outputs:
+      artifacts:
+      - name: hello-art
+        path: /tmp/hello_world.txt
+  - name: publisher
+    inputs:
+      parameters:
+      - name: status
+      artifacts:
+      - name: message
+        path: /tmp/message
+        optional: true
+    container:
+      image: alpine:latest
+      command: [sh, -c]
+      args: 
+      - |
+        echo '{{inputs.parameters.status}}'
+        # When executor fails, publisher should exit 1 to abort downstream tasks.
+        cat /tmp/message || echo 'publisher can handle executor failure && exit 1
+      # publisher logs when handling a failed task:
+      # Failed
+      # cat: can't open '/tmp/message': No such file or directory
+      # publisher can handle executor failure
+
+  # Definition for kfp-task-2, this is just a placeholder.
+  - name: printer
+    inputs:
+      parameters:
+      - name: message
+    container:
+      image: alpine:latest
+      command: [sh, -c]
+      args: ["echo '{{inputs.parameters.message}}'"]
