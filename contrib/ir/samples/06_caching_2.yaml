@@ -1,5 +1,4 @@
-# This example demonstrates the ability to pass artifacts
-# from one step to the next.
+# This example demonstrates an examplee KFP task broken down to 3 argo nodes.
 apiVersion: argoproj.io/v1alpha1
 kind: Workflow
 metadata:
