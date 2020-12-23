@@ -1,0 +1,124 @@
+{
+  "pipelineSpec": {
+    "schemaVersion": "v2alpha1",
+    "tasks": [
+      {
+        "executorLabel": "Ingestion",
+        "inputs": {
+          "parameters": {
+            "input_location": {
+              "runtimeValue": {
+                "runtimeParameter": "input_location"
+              }
+            }
+          }
+        },
+        "outputs": {
+          "artifacts": {
+            "examples": {
+              "artifactType": {
+                "instanceSchema": "properties:\ntitle: kfp.Dataset\ntype: object\n"
+              }
+            }
+          }
+        },
+        "taskInfo": {
+          "name": "Ingestion"
+        }
+      },
+      {
+        "outputs": {
+          "artifacts": {
+            "model": {
+              "artifactType": {
+                "instanceSchema": "properties:\ntitle: kfp.Model\ntype: object\n"
+              }
+            }
+          }
+        },
+        "executorLabel": "Trainer",
+        "inputs": {
+          "parameters": {
+            "optimizer": {
+              "runtimeValue": {
+                "runtimeParameter": "optimizer"
+              }
+            },
+            "n_epochs": {
+              "runtimeValue": {
+                "runtimeParameter": "n_epochs"
+              }
+            }
+          },
+          "artifacts": {
+            "examples": {
+              "producerTask": "Ingestion",
+              "outputArtifactKey": "examples"
+            }
+          }
+        },
+        "taskInfo": {
+          "name": "Trainer"
+        }
+      }
+    ],
+    "runtimeParameters": {
+      "input_location": {
+        "type": "STRING",
+        "defaultValue": {
+          "stringValue": "gs://test-bucket/pipeline_root"
+        }
+      },
+      "optimizer": {
+        "type": "STRING",
+        "defaultValue": {
+          "stringValue": "sgd"
+        }
+      },
+      "n_epochs": {
+        "type": "INT",
+        "defaultValue": {
+          "intValue": "200"
+        }
+      }
+    },
+    "pipelineInfo": {
+      "name": "two-step-pipeline-with-ontology"
+    },
+    "sdkVersion": "kfp-1.1.0-dev20201106",
+    "deploymentConfig": {
+      "executors": {
+        "Ingestion": {
+          "container": {
+            "args": [
+              "--input-location",
+              "{{$.inputs.parameters['input_location']}}",
+              "--output-examples",
+              "{{$.outputs.artifacts['examples'].uri}}"
+            ],
+            "image": "gcr.io/my-project/my-ingestor"
+          }
+        },
+        "Trainer": {
+          "container": {
+            "image": "gcr.io/my-project/my-fancy-trainer",
+            "args": [
+              "--input-examples",
+              "{{$.inputs.artifacts['examples'].uri}}",
+              "--optimizer",
+              "{{$.inputs.parameters['optimizer']}}",
+              "--n_epochs",
+              "{{$.inputs.parameters['n_epochs']}}",
+              "--output-model",
+              "{{$.outputs.artifacts['model'].uri}}"
+            ]
+          }
+        }
+      },
+      "@type": "type.googleapis.com/ml_pipelines.PipelineDeploymentConfig"
+    }
+  },
+  "runtimeConfig": {
+    "gcsOutputDirectory": "dummy_root"
+  }
+}

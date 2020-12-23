@@ -31,17 +31,19 @@ REQUIRES = [
     # Update the lower version when kfp sdk depends on new apis/fields in
     # kfp-server-api.
     # Note, please also update ./requirements.in
-    'kfp-server-api>=0.2.5, <2.0.0',
+    'kfp-server-api>=1.1.2, <2.0.0',
     'jsonschema >= 3.0.1',
     'tabulate',
     'click',
     'Deprecated',
     'strip-hints',
-    'docstring-parser>=0.7.3'
+    'docstring-parser>=0.7.3',
+    'kfp-pipeline-spec>=0.1.0, <0.2.0',
 ]
 
 TESTS_REQUIRE = [
     'mock',
+    'kfp-pipeline-spec>=0.1.0, <0.2.0',
 ]
 
 
@@ -79,6 +81,10 @@ setup(
         'kfp.dsl',
         'kfp.dsl.extensions',
         'kfp.notebook',
+        'kfp.v2',
+        'kfp.v2.compiler',
+        'kfp.v2.components',
+        'kfp.v2.dsl',
     ],
     classifiers=[
         'Intended Audience :: Developers',
@@ -99,6 +105,8 @@ setup(
     include_package_data=True,
     entry_points={
         'console_scripts': [
-            'dsl-compile = kfp.compiler.main:main', 'kfp=kfp.__main__:main'
+            'dsl-compile = kfp.compiler.main:main',
+            'dsl-compile-v2 = kfp.v2.compiler.main:main',
+            'kfp=kfp.__main__:main'
         ]
     })

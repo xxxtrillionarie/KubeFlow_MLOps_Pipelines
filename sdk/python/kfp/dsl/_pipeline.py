@@ -13,10 +13,11 @@
 # limitations under the License.
 
 from typing import Union
+from kubernetes.client.models import V1PodDNSConfig
 from . import _container_op
 from . import _resource_op
 from . import _ops_group
-from ._component_bridge import _create_container_op_from_component_and_arguments
+from ._component_bridge import _create_container_op_from_component_and_arguments, _sanitize_python_function_name
 from ..components import _components
 from ..components._naming import _make_name_unique_by_adding_index
 import sys
@@ -54,8 +55,8 @@ def pipeline(name : str = None, description : str = None):
   return _pipeline
 
 class PipelineConf():
-  """PipelineConf contains pipeline level settings
-  """
+  """PipelineConf contains pipeline level settings."""
+
   def __init__(self):
     self.image_pull_secrets = []
     self.timeout = 0
@@ -66,6 +67,7 @@ class PipelineConf():
     self.image_pull_policy = None
     self.parallelism = None
     self._data_passing_method = None
+    self.dns_config = None
 
   def set_image_pull_secrets(self, image_pull_secrets):
     """Configures the pipeline level imagepullsecret
@@ -148,6 +150,27 @@ class PipelineConf():
       transformer: A function that takes a kfp Op as input and returns a kfp Op
     """
     self.op_transformers.append(transformer)
+
+  def set_dns_config(self, dns_config: V1PodDNSConfig):
+    """Set the dnsConfig to be given to each pod.
+
+    Args:
+      dns_config: Kubernetes V1PodDNSConfig
+        For detailed description, check Kubernetes V1PodDNSConfig definition
+        https://github.com/kubernetes-client/python/blob/master/kubernetes/docs/V1PodDNSConfig.md
+
+    Example:
+
+      ::
+        import kfp
+        from kubernetes.client.models import V1PodDNSConfig, V1PodDNSConfigOption
+        pipeline_conf = kfp.dsl.PipelineConf()
+        pipeline_conf.set_dns_config(dns_config=V1PodDNSConfig(
+          nameservers=["1.2.3.4"],
+          options=[V1PodDNSConfigOption(name="ndots", value="2")]
+        ))
+    """
+    self.dns_config = dns_config
 
   @property
   def data_passing_method(self):
@@ -254,8 +277,13 @@ class Pipeline():
     Returns
       op_name: a unique op name.
     """
+    # Sanitizing the op name.
+    # Technically this could be delayed to the compilation stage, but string serialization of PipelineParams make unsanitized names problematic.
+    op_name = _sanitize_python_function_name(op.human_name).replace('_', '-')
     #If there is an existing op with this name then generate a new name.
-    op_name = _make_name_unique_by_adding_index(op.human_name, list(self.ops.keys()), ' ')
+    op_name = _make_name_unique_by_adding_index(op_name, list(self.ops.keys()), ' ')
+    if op_name == '':
+      op_name = _make_name_unique_by_adding_index('task', list(self.ops.keys()), ' ')
 
     self.ops[op_name] = op
     if not define_only:

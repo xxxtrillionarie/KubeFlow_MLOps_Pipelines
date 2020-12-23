@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import collections
+
 import re
 import warnings
 from typing import Any, Dict, List, TypeVar, Union, Callable, Optional, Sequence
@@ -30,6 +30,12 @@ from ..components.structures import ComponentSpec, ExecutionOptionsSpec, Caching
 T = TypeVar('T')
 # type alias: either a string or a list of string
 StringOrStringList = Union[str, List[str]]
+
+ALLOWED_RETRY_POLICIES = (
+    'Always',
+    'OnError',
+    'OnFailure',
+)
 
 
 # util functions
@@ -95,17 +101,17 @@ def create_and_append(current_list: Union[List[T], None], item: T) -> List[T]:
 class Container(V1Container):
     """
     A wrapper over k8s container definition object (io.k8s.api.core.v1.Container),
-    which is used to represent the `container` property in argo's workflow 
+    which is used to represent the `container` property in argo's workflow
     template (io.argoproj.workflow.v1alpha1.Template).
-    
-    `Container` class also comes with utility functions to set and update the 
+
+    `Container` class also comes with utility functions to set and update the
     the various properties for a k8s container definition.
 
-    NOTE: A notable difference is that `name` is not required and will not be 
+    NOTE: A notable difference is that `name` is not required and will not be
     processed for `Container` (in contrast to `V1Container` where `name` is a
-    required property). 
+    required property).
 
-    See: 
+    See:
     * https://github.com/kubernetes-client/python/blob/master/kubernetes/client/models/v1_container.py
     * https://github.com/argoproj/argo/blob/master/api/openapi-spec/swagger.json
 
@@ -114,12 +120,12 @@ class Container(V1Container):
 
         from kfp.dsl import ContainerOp
         from kubernetes.client.models import V1EnvVar
-        
+
 
         # creates a operation
-        op = ContainerOp(name='bash-ops', 
-                        image='busybox:latest', 
-                        command=['echo'], 
+        op = ContainerOp(name='bash-ops',
+                        image='busybox:latest',
+                        command=['echo'],
                         arguments=['$MSG'])
 
         # returns a `Container` object from `ContainerOp`
@@ -150,7 +156,7 @@ class Container(V1Container):
     def __init__(self, image: str, command: List[str], args: List[str],
                  **kwargs):
         """Creates a new instance of `Container`.
-        
+
         Args:
             image {str}: image to use, e.g. busybox:latest
             command {List[str]}: entrypoint array.  Not executed within a shell.
@@ -306,14 +312,14 @@ class Container(V1Container):
         return self.add_resource_limit("cpu", cpu)
 
     def set_gpu_limit(self, gpu, vendor="nvidia") -> 'Container':
-        """Set gpu limit for the operator. This function add '<vendor>.com/gpu' into resource limit. 
-        Note that there is no need to add GPU request. GPUs are only supposed to be specified in 
+        """Set gpu limit for the operator. This function add '<vendor>.com/gpu' into resource limit.
+        Note that there is no need to add GPU request. GPUs are only supposed to be specified in
         the limits section. See https://kubernetes.io/docs/tasks/manage-gpus/scheduling-gpus/.
 
         Args:
           gpu: A string which must be a positive number.
-          vendor: Optional. A string which is the vendor of the requested gpu. The supported values 
-            are: 'nvidia' (default), and 'amd'. 
+          vendor: Optional. A string which is the vendor of the requested gpu. The supported values
+            are: 'nvidia' (default), and 'amd'.
         """
 
         self._validate_positive_number(gpu, 'gpu')
@@ -393,7 +399,7 @@ class Container(V1Container):
         """Set image pull policy for the container.
 
         Args:
-          image_pull_policy: One of `Always`, `Never`, `IfNotPresent`. 
+          image_pull_policy: One of `Always`, `Never`, `IfNotPresent`.
         """
         if image_pull_policy not in ['Always', 'Never', 'IfNotPresent']:
             raise ValueError(
@@ -420,7 +426,7 @@ class Container(V1Container):
         return self
 
     def set_security_context(self, security_context) -> 'Container':
-        """Set security configuration to be applied on the container.  
+        """Set security configuration to be applied on the container.
 
         Args:
           security_context: Kubernetes security context
@@ -437,8 +443,8 @@ class Container(V1Container):
 
     def set_stdin(self, stdin=True) -> 'Container':
         """
-        Whether this container should allocate a buffer for stdin in the container 
-        runtime. If this is not set, reads from stdin in the container will always 
+        Whether this container should allocate a buffer for stdin in the container
+        runtime. If this is not set, reads from stdin in the container will always
         result in EOF.
 
         Args:
@@ -450,14 +456,14 @@ class Container(V1Container):
 
     def set_stdin_once(self, stdin_once=True) -> 'Container':
         """
-        Whether the container runtime should close the stdin channel after it has 
-        been opened by a single attach. When stdin is true the stdin stream will 
-        remain open across multiple attach sessions. If stdinOnce is set to true, 
-        stdin is opened on container start, is empty until the first client attaches 
-        to stdin, and then remains open and accepts data until the client 
-        disconnects, at which time stdin is closed and remains closed until the 
-        container is restarted. If this flag is false, a container processes that 
-        reads from stdin will never receive an EOF. 
+        Whether the container runtime should close the stdin channel after it has
+        been opened by a single attach. When stdin is true the stdin stream will
+        remain open across multiple attach sessions. If stdinOnce is set to true,
+        stdin is opened on container start, is empty until the first client attaches
+        to stdin, and then remains open and accepts data until the client
+        disconnects, at which time stdin is closed and remains closed until the
+        container is restarted. If this flag is false, a container processes that
+        reads from stdin will never receive an EOF.
 
         Args:
           stdin_once: boolean flag
@@ -468,11 +474,11 @@ class Container(V1Container):
 
     def set_termination_message_path(self, termination_message_path) -> 'Container':
         """
-        Path at which the file to which the container's termination message will be 
-        written is mounted into the container's filesystem. Message written is 
-        intended to be brief final status, such as an assertion failure message. 
-        Will be truncated by the node if greater than 4096 bytes. The total message 
-        length across all containers will be limited to 12kb. 
+        Path at which the file to which the container's termination message will be
+        written is mounted into the container's filesystem. Message written is
+        intended to be brief final status, such as an assertion failure message.
+        Will be truncated by the node if greater than 4096 bytes. The total message
+        length across all containers will be limited to 12kb.
 
         Args:
           termination_message_path: path for the termination message
@@ -482,11 +488,11 @@ class Container(V1Container):
 
     def set_termination_message_policy(self, termination_message_policy) -> 'Container':
         """
-        Indicate how the termination message should be populated. File will use the 
-        contents of terminationMessagePath to populate the container status message 
-        on both success and failure. FallbackToLogsOnError will use the last chunk 
-        of container log output if the termination message file is empty and the 
-        container exited with an error. The log output is limited to 2048 bytes or 
+        Indicate how the termination message should be populated. File will use the
+        contents of terminationMessagePath to populate the container status message
+        on both success and failure. FallbackToLogsOnError will use the last chunk
+        of container log output if the termination message file is empty and the
+        container exited with an error. The log output is limited to 2048 bytes or
         80 lines, whichever is smaller.
 
         Args:
@@ -501,7 +507,7 @@ class Container(V1Container):
 
     def set_tty(self, tty: bool = True) -> 'Container':
         """
-        Whether this container should allocate a TTY for itself, also requires 
+        Whether this container should allocate a TTY for itself, also requires
         'stdin' to be true.
 
         Args:
@@ -716,11 +722,6 @@ class BaseOp(object):
                  init_containers: List[UserContainer] = None,
                  sidecars: List[Sidecar] = None,
                  is_exit_handler: bool = False):
-        valid_name_regex = r'^[A-Za-z][A-Za-z0-9\s_-]*$'
-        if not re.match(valid_name_regex, name):
-            raise ValueError(
-                'Only letters, numbers, spaces, "_", and "-"  are allowed in name. Must begin with letter: %s'
-                % (name))
 
         if is_exit_handler:
             warnings.warn('is_exit_handler=True is no longer needed.', DeprecationWarning)
@@ -743,6 +744,7 @@ class BaseOp(object):
         self.affinity = {}
         self.pod_annotations = {}
         self.pod_labels = {}
+        self.retry_policy = None
         self.num_retries = 0
         self.timeout = 0
         self.init_containers = init_containers or []
@@ -828,7 +830,7 @@ class BaseOp(object):
           affinity: Kubernetes affinity
           For detailed spec, check affinity definition
           https://github.com/kubernetes-client/python/blob/master/kubernetes/client/models/v1_affinity.py
-        
+
         Example::
 
             V1Affinity(
@@ -842,7 +844,7 @@ class BaseOp(object):
         return self
 
     def add_node_selector_constraint(self, label_name, value):
-        """Add a constraint for nodeSelector. Each constraint is a key-value pair label. For the 
+        """Add a constraint for nodeSelector. Each constraint is a key-value pair label. For the
         container to be eligible to run on a node, the node must have each of the constraints appeared
         as labels.
 
@@ -876,14 +878,18 @@ class BaseOp(object):
         self.pod_labels[name] = value
         return self
 
-    def set_retry(self, num_retries: int):
+    def set_retry(self, num_retries: int, policy: str = None):
         """Sets the number of times the task is retried until it's declared failed.
 
         Args:
           num_retries: Number of times to retry on failures.
+          policy: Retry policy name.
         """
+        if policy is not None and policy not in ALLOWED_RETRY_POLICIES:
+            raise ValueError('policy must be one of: %r' % (ALLOWED_RETRY_POLICIES, ))
 
         self.num_retries = num_retries
+        self.retry_policy = policy
         return self
 
     def set_timeout(self, seconds: int):
@@ -979,7 +985,7 @@ class ContainerOp(BaseOp):
         def foo_pipeline(tag: str, pull_image_policy: str):
 
             # any attributes can be parameterized (both serialized string or actual PipelineParam)
-            op = dsl.ContainerOp(name='foo', 
+            op = dsl.ContainerOp(name='foo',
                                 image='busybox:%s' % tag,
                                 # pass in init_container list
                                 init_containers=[dsl.UserContainer('print', 'busybox:latest', command='echo "hello"')],
@@ -989,7 +995,7 @@ class ContainerOp(BaseOp):
                                 container_kwargs={'env': [V1EnvVar('foo', 'bar')]},
             )
 
-            # set `imagePullPolicy` property for `container` with `PipelineParam` 
+            # set `imagePullPolicy` property for `container` with `PipelineParam`
             op.container.set_image_pull_policy(pull_image_policy)
 
             # add sidecar with parameterized image tag
@@ -1029,11 +1035,11 @@ class ContainerOp(BaseOp):
                 " Please see the documentation: https://www.kubeflow.org/docs/pipelines/sdk/component-development/#writing-your-component-definition-file"
                 " The components can be created manually (or, in case of python, using kfp.components.create_component_from_func or func_to_container_op)"
                 " and then loaded using kfp.components.load_component_from_file, load_component_from_uri or load_component_from_text: "
-                "https://kubeflow-pipelines.readthedocs.io/en/latest/source/kfp.components.html#kfp.components.load_component_from_file",
-                category=DeprecationWarning,
+                "https://kubeflow-pipelines.readthedocs.io/en/stable/source/kfp.components.html#kfp.components.load_component_from_file",
+                category=FutureWarning,
             )
 
-        self.attrs_with_pipelineparams = BaseOp.attrs_with_pipelineparams + ['_container', 'artifact_arguments'] #Copying the BaseOp class variable!
+        self.attrs_with_pipelineparams = BaseOp.attrs_with_pipelineparams + ['_container', 'artifact_arguments', '_parameter_arguments'] #Copying the BaseOp class variable!
 
         input_artifact_paths = {}
         artifact_arguments = {}
@@ -1089,11 +1095,16 @@ class ContainerOp(BaseOp):
         # iter thru container and attach a proxy func to the container method
         for attr_to_proxy in dir(self._container):
             func = getattr(self._container, attr_to_proxy)
-            # ignore private methods
-            if hasattr(func, '__call__') and (attr_to_proxy[0] != '_') and (
-                    attr_to_proxy not in ignore_set):
+            # ignore private methods, and bypass method overrided by subclasses.
+            if (not hasattr(self, attr_to_proxy)
+                and hasattr(func, '__call__')
+                and (attr_to_proxy[0] != '_')
+                and (attr_to_proxy not in ignore_set)):
                 # only proxy public callables
                 setattr(self, attr_to_proxy, _proxy(attr_to_proxy))
+
+        if output_artifact_paths:
+            warnings.warn('The output_artifact_paths parameter is deprecated since SDK v0.1.32. Use the file_outputs parameter instead. file_outputs now supports outputting big data.', DeprecationWarning)
 
         # Special handling for the mlpipeline-ui-metadata and mlpipeline-metrics outputs that should always be saved as artifacts
         # TODO: Remove when outputs are always saved as artifacts
@@ -1108,11 +1119,9 @@ class ContainerOp(BaseOp):
         self.artifact_arguments = artifact_arguments
         self.file_outputs = file_outputs
         self.output_artifact_paths = output_artifact_paths or {}
-        if output_artifact_paths:
-            file_outputs.update(output_artifact_paths)
-            warnings.warn('The output_artifact_paths parameter is deprecated since SDK v0.1.32. Use the file_outputs parameter instead. file_outputs now supports outputting big data.', DeprecationWarning)
 
         self._metadata = None
+        self._parameter_arguments = None
 
         self.execution_options = ExecutionOptionsSpec(
             caching_strategy=CachingStrategySpec(),
@@ -1156,15 +1165,15 @@ class ContainerOp(BaseOp):
 
     @property
     def container(self):
-        """`Container` object that represents the `container` property in 
+        """`Container` object that represents the `container` property in
         `io.argoproj.workflow.v1alpha1.Template`. Can be used to update the
-        container configurations. 
-        
+        container configurations.
+
         Example::
 
             import kfp.dsl as dsl
             from kubernetes.client.models import V1EnvVar
-    
+
             @dsl.pipeline(name='example_pipeline')
             def immediate_value_pipeline():
                 op1 = (dsl.ContainerOp(name='example', image='nginx:alpine')
